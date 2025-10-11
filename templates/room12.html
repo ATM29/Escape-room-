@@ -1,0 +1,26 @@
+
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"><title>Final — Noir Edition</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<script src="{{ url_for('static', filename='js/noir.js') }}" defer></script></head>
+<body class="dark">
+  <header class="topbar"><div class="title">Final</div>
+    <div class="meta"><div id="timer" class="timer">00:00</div><div class="coins">Coins: <span id="coinCount">{{ coins }}</span></div>
+    <button id="hintBtn" class="icon">💡<span id="hintCount">1</span></button>
+    <button id="notebookBtn" class="icon">📓</button></div></header>
+
+  <main class="container"><article class="room panel"><h2>Final</h2><p class="lead">Chapter 12 — Final.</p>
+
+<div class="panel">
+  <p>Final chamber: use the keywords (first letters) from rooms 2,4,6,8,10,11 to form the final one-word answer. This word reveals the RECKON — the perpetrator's motive.</p>
+</div>
+<form method="POST" action="{{ url_for('submit') }}" class="pform">
+  <input type="hidden" name="room" value="room12">
+  <label for="answer">Final one-word truth:</label>
+  <input id="answer" name="answer" placeholder="Enter final truth..." autocomplete="off" value="">
+  <button class="btn" type="submit">Reveal</button>
+</form>
+
+  <div class="nav" style="margin-top:12px;"><a class="btn subtle" href="{{ url_for('index') }}">Back to Map</a></div>
+</article></main></body></html>

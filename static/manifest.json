@@ -1,0 +1,9 @@
+{
+  "name": "Detective Escape Noir v5",
+  "short_name": "NoirV5",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#071018",
+  "theme_color": "#071018",
+  "icons": []
+}

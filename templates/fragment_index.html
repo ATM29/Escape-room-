@@ -1,0 +1,17 @@
+
+<section class="intro panel">
+  <h1>Case: Ledger of Shadows — Fixed</h1>
+  <p class="lead">12-room detective escape. Streaming ambient music (Internet Archive). Hints on marked rooms.</p>
+  <a class="btn" href="{{ url_for('room_full', name='room1') }}" data-nav>Begin Investigation</a>
+</section>
+<section class="map panel">
+  {% for i in range(1,13) %}
+    {% set r = 'room' + i|string %}
+    <a class="card {% if i>1 and not progress['room'+(i-1)|string] %}disabled{% endif %}" href="{{ url_for('room_full', name=r) }}" data-nav>
+      <div class="card-title">Chapter {{ i }}</div>
+      <div class="card-body">{{ ['Study','Archive','Interrogation','Notebook','Lab','Locker','Basement','Alley','Vault','Final','Gallery','Confront'][i-1] }}</div>
+      <div class="status">{% if progress[r] %}<span class="done">Solved</span>{% else %}<span class="locked">Locked</span>{% endif %}</div>
+    </a>
+  {% endfor %}
+</section>
+<section class="controls"><a class="btn subtle" href="{{ url_for('reset') }}">Reset Case</a><button class="btn subtle" id="showLeader" data-leader>Local Leaderboard</button></section>

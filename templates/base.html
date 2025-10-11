@@ -1,0 +1,14 @@
+
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Detective Escape — Fixed</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<script src="{{ url_for('static', filename='js/vfixed.js') }}" defer></script>
+</head><body class="dark">
+<header class="topbar"><div class="title">Detective Escape — Fixed</div><div class="meta"><div id="timer" class="timer">00:00</div><div class="coins">Coins: <span id="coinCount">{{ coins }}</span></div><div class="controls"><button id="playBtn" class="icon">Play</button><button id="muteBtn" class="icon">Mute</button><button id="notebookBtn" class="icon">📓</button></div></div></header>
+<main id="mainContent" class="container">{{ main_content|safe }}</main>
+<div id="notebook" class="modal hidden"><div class="modal-content"><h3>Notebook</h3><div id="notes">No notes yet.</div><button class="btn" id="closeNotes">Close</button></div></div>
+<div id="leaderModal" class="modal hidden"><div class="modal-content"><h3>Local Leaderboard</h3><ol id="scores"></ol><button class="btn" id="closeLeader">Close</button></div></div>
+<!-- stream audio from Internet Archive (direct file URLs) -->
+<audio id="aud_theme" src="https://archive.org/download/AmbientTracks/cloudsurf.ogg" loop preload="auto"></audio>
+<audio id="aud_tension" src="https://archive.org/download/AmbientTracks/pranasurf.ogg" loop preload="auto"></audio>
+<audio id="aud_victory" src="https://archive.org/download/AmbientTracks/qetoret.ogg" preload="auto"></audio>
+</body></html>
