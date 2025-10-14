@@ -1,1 +1,38 @@
-{}
+{
+  "start_time": 1760484623,
+  "interval": 240,
+  "round": [
+    {
+      "id": "30049",
+      "name": "Mohamed Gamal Mahmoud",
+      "code": 4555
+    },
+    {
+      "id": "13191",
+      "name": "Hadeel Yasser",
+      "code": 9271
+    },
+    {
+      "id": "16401",
+      "name": "Mona Atef",
+      "code": 4402
+    },
+    {
+      "id": "17462",
+      "name": "ahmed fawzy",
+      "code": 1072
+    }
+  ],
+  "codes_hashed": {
+    "30049": "52a55057b498b3aebc54d469e81142ee57ddc7abfc6d379b5e8a5c0c7a9ef820",
+    "13191": "c2816cd4c92c72ba67a6906faa71974b5bc8e09be0d476886fdcb076dd16db7d",
+    "16401": "26d1c63c2861b182cf59b189c0e430c74606e8626f0f742ec6230c332871603b",
+    "17462": "f8b2f96ed09b16bfd24ff625c064408fe19143db121b7944763fcbcc69ab4991"
+  },
+  "solved": {
+    "30049": false,
+    "13191": false,
+    "16401": false,
+    "17462": false
+  }
+}

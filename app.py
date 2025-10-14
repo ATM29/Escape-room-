@@ -62,7 +62,33 @@ def register_get():
     return render_template('register.html', managers=managers)
 
 @app.route('/register', methods=['POST'])
+
+@app.route('/register', methods=['POST'])
 def register_post():
+    payload = request.get_json() or {}
+    players_in = payload.get('players', [])
+    df = load_excel()
+    if df is None:
+        return jsonify({'ok':False, 'error':'excel_missing'}), 400
+    saved = []
+    for p in players_in:
+        entered_id = str(p.get('id', '')).strip()
+        manager = p.get('manager', '')
+        match = df[(df['ID'] == entered_id) & (df['Reporting to'] == manager)]
+        if match.empty:
+            return jsonify({'ok':False, 'error':'invalid_id_or_manager', 'id': entered_id, 'manager': manager}), 400
+        h = hashlib.sha1(entered_id.encode('utf-8')).hexdigest()
+        digit = int(h[:8], 16) % 10
+        number = int(h[8:16], 16) % 9000 + 1000
+        saved.append({'id': entered_id, 'name': match.iloc[0]['Name'], 'manager': manager, 'digit': digit, 'number': number, 'score': 0})
+    
+    save_json(PLAYERS_PATH, saved)
+    # Store player's session info
+    session['registered'] = True
+    session['player'] = saved[0]
+    
+    return jsonify({'ok': True, 'players': saved})
+
     payload = request.get_json() or {}
     players_in = payload.get('players', [])
     df = load_excel()
@@ -92,7 +118,51 @@ def welcome_after_register():
     return render_template('welcome_after_register.html')
 
 @app.route('/start_session', methods=['POST'])
+
+@app.route('/start_session', methods=['POST'])
 def start_session():
+    if not session.get('registered'):
+        return jsonify({'ok': False, 'error': 'not_registered'}), 400
+    
+    df = load_excel()
+    if df is None:
+        return jsonify({'ok': False, 'error': 'excel_missing'}), 400
+    
+    player = session.get('player')
+    chosen_manager = player.get('manager')
+    
+    # Exclude player's manager team and the player themselves
+    excluded_ids = df[df['Reporting to'] == chosen_manager]['ID'].astype(str).tolist()
+    excluded_ids += [player['id']]
+    pool = df[~df['ID'].isin(excluded_ids)][['ID', 'Name']].astype(str).values.tolist()
+    
+    if len(pool) == 0:
+        return jsonify({'ok': False, 'error': 'no_pool'}), 400
+    
+    rng = random.Random(int(time.time()))
+    rng.shuffle(pool)
+    
+    selected = []
+    for i in range(ROUND_SIZE):
+        item = pool[i % len(pool)]
+        selected.append({'id': item[0], 'name': item[1], 'code': rng.randint(1000, 9999)})
+    
+    # Hash the codes for secure comparison later
+    codes_hashed = {s['id']: hashlib.sha256(str(s['code']).encode()).hexdigest() for s in selected}
+    
+    # Store session data for the round
+    session['game'] = {
+        'start_time': int(time.time()),
+        'interval': ROUND_INTERVAL,
+        'round': selected,
+        'codes_hashed': codes_hashed,
+        'solved': {s['id']: False for s in selected}
+    }
+    
+    save_json(SESSION_PATH, session['game'])
+    
+    return jsonify({'ok': True, 'start_time': session['game']['start_time']})
+
     if not session.get('registered'):
         return jsonify({'ok':False,'error':'not_registered'}),400
     df = load_excel()
@@ -123,7 +193,9 @@ def start_session():
 def game_page():
     if not session.get('game'):
         return redirect(url_for('register_get'))
-    return render_template('game.html')
+    
+    return render_template('game.html', round=session['game']['round'])
+
 
 @app.route('/api/current_round')
 def api_current_round():
@@ -140,7 +212,43 @@ def api_current_round():
     return jsonify({'ok':True, 'names': names, 'ids': ids, 'time_left': time_left})
 
 @app.route('/api/submit_digit', methods=['POST'])
+
+@app.route('/api/submit_digit', methods=['POST'])
 def api_submit_digit():
+    data = request.get_json() or {}
+    if not data:
+        return jsonify({'ok': False, 'error': 'invalid_data'}), 400
+
+    # Extract player inputs and match against expected values
+    g = session.get('game')
+    if not g:
+        return jsonify({'ok': False, 'error': 'no_session'}), 400
+
+    # Validate if all IDs are correct and match their respective hashes
+    for player_id, entered_digit in data.items():
+        target_player = next((player for player in g['round'] if player['id'] == player_id), None)
+        if not target_player:
+            return jsonify({'ok': False, 'error': 'invalid_target_id'}), 400
+        
+        hashed_code = hashlib.sha256(entered_digit.encode()).hexdigest()
+        if hashed_code != g['codes_hashed'].get(player_id):
+            return jsonify({'ok': False, 'error': 'incorrect_digit'}), 400
+        else:
+            g['solved'][player_id] = True
+
+    # Check if all players are solved
+    if all(g['solved'].values()):
+        total_time = int(time.time()) - g['start_time']
+        # Update leaderboard if win
+        lb = load_json(LEADER_PATH) or []
+        player = session.get('player')
+        lb.append({'name': player.get('name', 'Anon'), 'manager': player.get('manager', ''), 'result': 'Win', 'time': total_time})
+        save_json(LEADER_PATH, lb)
+        session.pop('game', None)
+        return jsonify({'ok': True, 'status': 'win', 'time': total_time})
+    else:
+        return jsonify({'ok': True, 'status': 'correct'})
+
     data = request.get_json() or {}
     entered = str(data.get('digit','')).strip()
     target_id = str(data.get('id','')).strip()
@@ -188,7 +296,45 @@ def api_time_left():
     return jsonify({'ok':True,'time_left': time_left})
 
 @app.route('/api/reset_round', methods=['POST'])
+
+@app.route('/api/reset_round', methods=['POST'])
 def api_reset_round():
+    if not session.get('registered'):
+        return jsonify({'ok': False, 'error': 'not_registered'}), 400
+    
+    df = load_excel()
+    player = session.get('player')
+    chosen_manager = player.get('manager')
+    
+    excluded_ids = df[df['Reporting to'] == chosen_manager]['ID'].astype(str).tolist()
+    excluded_ids += [player['id']]
+    pool = df[~df['ID'].isin(excluded_ids)][['ID', 'Name']].astype(str).values.tolist()
+    
+    if len(pool) == 0:
+        return jsonify({'ok': False, 'error': 'no_pool'}), 400
+    
+    rng = random.Random(int(time.time()))
+    rng.shuffle(pool)
+    
+    selected = []
+    for i in range(ROUND_SIZE):
+        item = pool[i % len(pool)]
+        selected.append({'id': item[0], 'name': item[1], 'code': rng.randint(1000, 9999)})
+    
+    codes_hashed = {s['id']: hashlib.sha256(str(s['code']).encode()).hexdigest() for s in selected}
+    
+    session['game'] = {
+        'start_time': int(time.time()),
+        'interval': ROUND_INTERVAL,
+        'round': selected,
+        'codes_hashed': codes_hashed,
+        'solved': {s['id']: False for s in selected}
+    }
+    
+    save_json(SESSION_PATH, session['game'])
+    
+    return jsonify({'ok': True})
+
     # reset the round (used when time over or manual reset). Generates new 4 players and codes
     if not session.get('registered'):
         return jsonify({'ok':False,'error':'not_registered'}),400
@@ -238,3 +384,9 @@ def finished():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
+
+@app.route('/intro')
+def intro_page():
+    if not session.get('registered'):
+        return redirect(url_for('register_get'))
+    return render_template('intro.html')  # Create this template for intro details

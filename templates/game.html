@@ -1,2 +1,83 @@
 
-<!doctype html><html lang="en"><head><meta charset="utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Game</title><link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"></head><body><header class="topbar en"><div class="brand">Detective Escape</div><div class="meta"><div id="timer">04:00</div><a href="/leaderboard" class="small">Leaderboard</a></div></header><main class="container en"><section class="panel"><h2>Find the players and collect their digits</h2><div id="names"></div><div style="margin-top:8px">Time left: <span id="time_left">--</span>s</div><hr/><div id="inputs"></div><div id="result" style="margin-top:12px"></div><div style="margin-top:12px"><button id="resetBtn" class="btn">Reset Names</button></div></section></main><script src="{{ url_for('static', filename='js/game_rounds.js') }}"></script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escape Room Game</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        #playerList {
+            list-style-type: none;
+            padding: 0;
+        }
+        #playerList li {
+            margin: 10px 0;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .submit-button {
+            padding: 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            font-size: 16px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to the Escape Room Game!</h1>
+    <h2>Players in this round:</h2>
+    <ul id="playerList">
+        {% for player in round %}
+            <li>{{ player.name }} (ID: {{ player.id }})</li>
+        {% endfor %}
+    </ul>
+
+    <h3>Enter the digit of the player:</h3>
+    <form id="codeForm">
+        {% for player in round %}
+            <label>{{ player.name }} (ID: {{ player.id }})</label>
+            <input type="text" id="digit_{{ player.id }}" name="digit_{{ player.id }}" placeholder="Enter the code" />
+        {% endfor %}
+        <button type="button" class="submit-button" onclick="submitForm()">Submit Codes</button>
+    </form>
+
+    <script>
+        function submitForm() {
+            const formData = new FormData(document.getElementById('codeForm'));
+            const data = {};
+            formData.forEach((value, key) => {
+                data[key] = value;
+            });
+
+            fetch('/api/submit_digit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.ok) {
+                    alert("Codes submitted successfully!");
+                } else {
+                    alert("Error: " + result.error);
+                }
+            })
+            .catch(error => {
+                alert("Error submitting codes: " + error);
+            });
+        }
+    </script>
+</body>
+</html>
