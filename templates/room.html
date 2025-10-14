@@ -1,0 +1,46 @@
+
+<!doctype html>
+<html lang="en" dir="rtl">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Detective Escape — Room {{ room.id }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header class="topbar en">
+    <div class="brand">Detective Escape</div>
+    <div class="meta">
+      <div id="timer">00:00</div>
+      <button id="mute" class="small">Mute</button>
+      <button id="showLeaderboard" class="small">Leaderboard</button>
+    </div>
+  </header>
+  <main class="container en">
+    <section class="panel">
+      <h2 class="arabic">{{ room.prompt | replace('\n','<br/>') | safe }}</h2>
+      {% if room.audio %}
+        <div class="audio-clue">
+          <button id="playClue" class="btn">Play Clue</button>
+          <audio id="cluePlayer" src="{{ url_for('static', filename=room.audio) }}"></audio>
+        </div>
+      {% endif %}
+      <form id="answerForm" method="POST" action="{{ url_for('submit', idx=room.id) }}">
+        <input type="text" name="answer" placeholder="Type your answer..." autocomplete="off" required>
+        <button type="submit" class="btn">Submit</button>
+      </form>
+      <div id="message"></div>
+    </section>
+  </main>
+
+  <div id="leaderModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>Leaderboard</h3>
+      <ol id="scores"></ol>
+      <button id="closeLeader" class="btn subtle">Close</button>
+    </div>
+  </div>
+
+  <audio id="bg" src="{{ url_for('static', filename='audio/bg_music.mp3') }}" loop preload="auto"></audio>
+
+<script src="{{ url_for('static', filename='js/game.js') }}"></script>
+</body>
+</html>

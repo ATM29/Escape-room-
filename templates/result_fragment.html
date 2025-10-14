@@ -1,0 +1,7 @@
+
+{% if correct %}
+<div class="result success">✅ Correct Answer! Loading next clue...</div>
+<script>setTimeout(function(){ window.location = "{{ url_for('room', idx=next_idx) if next_idx else '/finished' }}"; }, 2200);</script>
+{% else %}
+<div class="result fail">❌ Wrong answer. Try again!</div>
+{% endif %}

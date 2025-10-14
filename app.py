@@ -1,103 +1,201 @@
 
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-import time, os
+from flask import Flask, render_template, request, jsonify, redirect, url_for
+import os, json, time, random, hashlib
+import pandas as pd
+
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.secret_key = os.environ.get('FLASK_SECRET','change-me')
-ANSWERS = {
-  "room1":"fingerprint","room2":"evidence","room3":"contradiction","room4":"note",
-  "room5":"7291","room6":"admit","room7":"keyhole","room8":"shadow",
-  "room9":"2468","room10":"reckon","room11":"ledger","room12":"expose"
-}
-ORDER = list(ANSWERS.keys())
-HINT_ELIGIBLE = {"room2","room9","room10","room12"}
-ROOM_TITLES = {
-  "room1":"Study","room2":"Archive","room3":"Interrogation","room4":"Notebook",
-  "room5":"Lab","room6":"Locker","room7":"Basement","room8":"Alley",
-  "room9":"Vault","room10":"Final","room11":"Gallery","room12":"Confrontation"
-}
-ROOM_PROMPTS = {
- "room1":"Portrait crooked; note reads: 'Left behind at every touch.' (What is it?)",
- "room2":"Cipher: MJ QQFYNJ MJ GZXXJ? (ROT-6 then uppercase; searching allowed.)",
- "room3":"Two witnesses say 9pm; one says 10pm. What's the inconsistency?",
- "room4":"A small note reads: NOTE. Enter that word to proceed.",
- "room5":"Locker: 7 - 2 - ? - 1 with note: 'mirror the middle pair'.",
- "room6":"Clerk's torn line: 'I had to ___.' (one word).",
- "room7":"Torn letters 'K Y H O L E' around a key drawing. Reconstruct.",
- "room8":"Riddle: 'I follow when you walk, I shrink at noon, I stretch at dusk.'",
- "room9":"Sort items into boxes: Broken Glass (Physical), Email Log (Digital), Witness Note (Logic). Correct sorting reveals code.",
- "room10":"Final: Use initials from key solved rooms to form the final truth.",
- "room11":"A ledger page shows the word LEDGER hidden among numbers. Type LEDGER.",
- "room12":"Confrontation: Say the word that reveals the scheme."
-}
+
+BASE = os.path.dirname(__file__)
+DATA_XLSX = os.path.join(BASE, 'static', 'data', 'Names for team building.xlsx')
+PLAYERS_PATH = os.path.join(BASE, 'players.json')
+SESSION_PATH = os.path.join(BASE, 'session.json')
+LEADER_PATH = os.path.join(BASE, 'leaderboard.json')
+
+ROUND_INTERVAL = 90  # seconds per round
+ROUND_SIZE = 6
+WIN_SCORE = 5
+
+def load_excel():
+    if not os.path.exists(DATA_XLSX):
+        return None
+    df = pd.read_excel(DATA_XLSX, engine='openpyxl', dtype=str)
+    df.columns = [c.strip() for c in df.columns]
+    cols = {c.lower(): c for c in df.columns}
+    if 'id' not in cols or 'name' not in cols or ('reporting to' not in cols and 'manager' not in cols):
+        return None
+    manager_col = cols.get('reporting to') or cols.get('manager')
+    df = df.rename(columns={cols['id']:'ID', cols['name']:'Name', manager_col:'Reporting to'})
+    df['Reporting to'] = df['Reporting to'].astype(str).str.strip()
+    df['ID'] = df['ID'].astype(str).str.strip()
+    return df[['ID','Name','Reporting to']].dropna()
+
+def save_json(path, obj):
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+
+def load_json(path):
+    if not os.path.exists(path):
+        return None
+    with open(path, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 @app.route('/')
 def index():
-    session.setdefault('progress', {r: False for r in ORDER})
-    session.setdefault('started_at', None)
-    session.setdefault('hint_coins', 0)
-    main_content = render_template('fragment_index.html', progress=session['progress'])
-    return render_template('base.html', main_content=main_content, coins=session.get('hint_coins',0))
+    return redirect(url_for('register_get'))
 
-@app.route('/room/<name>')
-def room_full(name):
-    if name not in ORDER: return redirect(url_for('index'))
-    progress = session.get('progress', {r: False for r in ORDER})
-    idx = ORDER.index(name)
-    if idx>0 and not progress[ORDER[idx-1]]: return redirect(url_for('index'))
-    if session.get('started_at') is None and name==ORDER[0]:
-        session['started_at'] = int(time.time())
-    hints_allowed = name in HINT_ELIGIBLE
-    main_content = render_template('fragment.html', room=name, room_names=ROOM_TITLES, prompts=ROOM_PROMPTS, progress=progress, hints_allowed=hints_allowed)
-    return render_template('base.html', main_content=main_content, coins=session.get('hint_coins',0))
+@app.route('/register', methods=['GET'])
+def register_get():
+    df = load_excel()
+    if df is None:
+        return "Excel file missing or invalid. Place 'Names for team building.xlsx' into static/data/ with columns: ID, Name, Reporting to (or Manager).", 500
+    managers = sorted(set(df['Reporting to'].dropna().tolist()))
+    return render_template('register.html', managers=managers)
 
-@app.route('/fragment/<name>')
-def fragment(name):
-    if name == 'index':
-        return render_template('fragment_index.html', progress=session.get('progress', {r:False for r in ORDER}))
-    if name not in ORDER: return "", 404
-    progress = session.get('progress', {r: False for r in ORDER})
-    hints_allowed = name in HINT_ELIGIBLE
-    return render_template('fragment.html', room=name, room_names=ROOM_TITLES, prompts=ROOM_PROMPTS, progress=progress, hints_allowed=hints_allowed)
+@app.route('/register', methods=['POST'])
+def register_post():
+    payload = request.get_json() or {}
+    players_in = payload.get('players', [])
+    df = load_excel()
+    if df is None:
+        return jsonify({'ok':False,'error':'excel_missing'}),400
+    saved = []
+    for p in players_in:
+        entered_id = str(p.get('id','')).strip()
+        manager = p.get('manager','')
+        match = df[(df['ID']==entered_id) & (df['Reporting to']==manager)]
+        if match.empty:
+            return jsonify({'ok':False,'error':'invalid_id_or_manager','id':entered_id,'manager':manager}),400
+        h = hashlib.sha1(entered_id.encode('utf-8')).hexdigest()
+        digit = int(h[:8],16) % 10
+        number = int(h[8:16],16) % 9000 + 1000
+        saved.append({'id': entered_id, 'name': match.iloc[0]['Name'], 'manager': manager, 'digit': digit, 'number': number, 'score':0})
+    save_json(PLAYERS_PATH, saved)
+    return jsonify({'ok':True,'players':saved})
 
-@app.route('/submit', methods=['POST'])
-def submit():
-    room = request.form.get('room','')
-    answer = (request.form.get('answer') or '').strip().lower()
-    progress = session.get('progress', {r: False for r in ORDER})
-    correct = False
-    if room in ANSWERS:
-        correct = (answer == ANSWERS[room].lower())
-    if correct:
-        if not progress.get(room):
-            session['hint_coins'] = session.get('hint_coins',0)+1
-        progress[room] = True
-        session['progress'] = progress
-        if all(progress.values()):
-            started = session.get('started_at'); ended = int(time.time()); elapsed = ended-started if started else 0
-            session.setdefault('finished_times', []).append(elapsed)
-        return render_template('success_fragment.html', room=room, progress=progress, coins=session.get('hint_coins',0))
+@app.route('/welcome_after_register')
+def welcome_after_register():
+    return render_template('welcome_after_register.html')
+
+@app.route('/start_session', methods=['POST'])
+def start_session():
+    players = load_json(PLAYERS_PATH) or []
+    df = load_excel()
+    if df is None:
+        return jsonify({'ok':False,'error':'excel_missing'}),400
+    chosen_managers = set(p.get('manager') for p in players if p.get('manager'))
+    excluded_ids = df[df['Reporting to'].isin(chosen_managers)]['ID'].astype(str).tolist()
+    excluded_ids += [p['id'] for p in players]
+    pool_ids = df[~df['ID'].isin(excluded_ids)][['ID','Name']].astype(str).values.tolist()  # list of [ID,Name]
+    # shuffle deterministically
+    start_time = int(time.time())
+    rng = random.Random(start_time)
+    rng.shuffle(pool_ids)
+    rounds = []
+    if len(pool_ids)==0:
+        rounds = []
     else:
-        session['fails'] = session.get('fails',0)+1
-        return render_template('fail_fragment.html', room=room, attempt=answer, progress=progress, coins=session.get('hint_coins',0))
+        idx = 0
+        while len(rounds) < 500:
+            chunk = []
+            for _ in range(ROUND_SIZE):
+                item = pool_ids[idx % len(pool_ids)]
+                chunk.append({'id': item[0], 'name': item[1]})
+                idx += 1
+            rounds.append(chunk)
+    session = {'start_time': start_time, 'rounds': rounds, 'interval': ROUND_INTERVAL}
+    save_json(SESSION_PATH, session)
+    return jsonify({'ok':True,'start_time':start_time})
 
-@app.route('/use_hint', methods=['POST'])
-def use_hint():
+@app.route('/game')
+def game_page():
+    return render_template('game.html')
+
+@app.route('/api/current_round')
+def api_current_round():
+    sess = load_json(SESSION_PATH) or {}
+    if not sess or 'rounds' not in sess or len(sess['rounds'])==0:
+        return jsonify({'ok':False,'error':'no_session_or_empty_pool'}),404
+    now = int(time.time())
+    elapsed = now - sess['start_time']
+    interval = sess.get('interval', ROUND_INTERVAL)
+    idx = int((elapsed // interval) % len(sess['rounds']))
+    time_into = elapsed % interval
+    time_left = int(interval - time_into)
+    # return names for display and ids for verification
+    round_chunk = sess['rounds'][idx]
+    names = [r['name'] for r in round_chunk]
+    ids = [r['id'] for r in round_chunk]
+    return jsonify({'ok':True, 'round_index': idx, 'ids': ids, 'names': names, 'time_left': time_left})
+
+@app.route('/api/submit_code', methods=['POST'])
+def api_submit_code():
     data = request.get_json() or {}
-    room = data.get('room',''); level = int(data.get('level',1))
-    coins = session.get('hint_coins',0)
-    if coins<=0: return jsonify({'ok':False,'error':'no_coins','coins':coins}), 400
-    if room not in HINT_ELIGIBLE: return jsonify({'ok':False,'error':'not_allowed','coins':coins}), 400
-    session['hint_coins'] = coins-1; session['hints_used'] = session.get('hints_used',0)+1
-    return jsonify({'ok':True,'coins':session['hint_coins'],'level':level})
+    player_number = int(data.get('number') or 0)
+    code = str(data.get('code') or '').strip()
+    players = load_json(PLAYERS_PATH) or []
+    player = next((p for p in players if int(p.get('number'))==int(player_number)), None)
+    if not player:
+        return jsonify({'ok':False,'error':'player_not_found'}),404
+    sess = load_json(SESSION_PATH) or {}
+    if not sess or 'rounds' not in sess:
+        return jsonify({'ok':False,'error':'no_session'}),400
+    now = int(time.time())
+    elapsed = now - sess['start_time']
+    interval = sess.get('interval', ROUND_INTERVAL)
+    idx = int((elapsed // interval) % len(sess['rounds']))
+    time_into = elapsed % interval
+    time_left = int(interval - time_into)
+    if time_left <= 0:
+        return jsonify({'ok':False,'error':'time_over'}),400
+    current_ids = [r['id'] for r in sess['rounds'][idx]]
+    def digit_of_id(idstr):
+        h = hashlib.sha1(idstr.encode('utf-8')).hexdigest()
+        return str(int(h[:8],16) % 10)
+    correct = ''.join(digit_of_id(i) for i in current_ids)
+    if len(code) != len(correct):
+        return jsonify({'ok':False,'error':'bad_length','expected_length':len(correct)}),400
+    if code == correct:
+        for p in players:
+            if int(p.get('number'))==int(player_number):
+                p['score'] = p.get('score',0) + 1
+                score = p['score']
+                break
+        save_json(PLAYERS_PATH, players)
+        winner = None
+        if score >= WIN_SCORE:
+            winner = p.get('name')
+            lb = load_json(LEADER_PATH) or []
+            elapsed_total = int(time.time()) - sess['start_time']
+            lb.append({'name': winner, 'time': elapsed_total})
+            lb = sorted(lb, key=lambda x: x['time'])[:100]
+            save_json(LEADER_PATH, lb)
+        return jsonify({'ok':True,'correct':True,'score':score,'winner':winner})
+    else:
+        return jsonify({'ok':True,'correct':False,'score':player.get('score',0)})
 
-@app.route('/api/status')
-def api_status():
-    return jsonify({'progress': session.get('progress', {}), 'hint_coins': session.get('hint_coins',0)})
+@app.route('/players.json')
+def players_json():
+    return json.dumps(load_json(PLAYERS_PATH) or [])
 
-@app.route('/reset')
-def reset():
-    session.pop('progress', None); session.pop('started_at', None); session.pop('hints_used', None); session.pop('fails', None); session['hint_coins'] = 0
-    return redirect(url_for('index'))
+@app.route('/leaderboard.json')
+def leaderboard_json():
+    return json.dumps(load_json(LEADER_PATH) or [])
+
+@app.route('/save_score', methods=['POST'])
+def save_score():
+    data = request.get_json() or {}
+    name = data.get('name','Anon')[:32]
+    time_sec = int(data.get('time') or 0)
+    lb = load_json(LEADER_PATH) or []
+    lb.append({'name': name, 'time': time_sec})
+    lb = sorted(lb, key=lambda x: x['time'])[:100]
+    save_json(LEADER_PATH, lb)
+    return jsonify({'ok':True})
+
+@app.route('/finished')
+def finished():
+    return render_template('finished.html')
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')

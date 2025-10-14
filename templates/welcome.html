@@ -1,0 +1,22 @@
+
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Detective Escape — Welcome</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="center">
+  <div class="card">
+    <h1>Welcome, Detective</h1>
+    <p>Listen to the intro. When it finishes, the game will begin.</p>
+    <audio id="intro" autoplay preload="auto" src="{{ url_for('static', filename='audio/intro.mp3') }}"></audio>
+    <p class="muted-note">If your browser blocks autoplay, click anywhere to start the intro.</p>
+  </div>
+<script>
+const intro = document.getElementById('intro');
+intro.addEventListener('ended', ()=> { window.location.href = '/room/1'; });
+document.addEventListener('click', ()=> { intro.play().catch(()=>{}); }, {once:true});
+intro.play().catch(()=>{});
+</script>
+</body>
+</html>

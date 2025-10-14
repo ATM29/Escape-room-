@@ -1,0 +1,12 @@
+
+body{font-family:Arial, sans-serif;background:#071018;color:#eaf2f8;margin:0;padding:0}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:rgba(255,255,255,0.02)}
+.container{max-width:820px;margin:20px auto;padding:12px}
+.panel{background:rgba(255,255,255,0.03);padding:16px;border-radius:10px}
+.prompt{color:#d1e8ff;line-height:1.6}
+.answer-form{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+input[name="answer"]{padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.02);color:inherit}
+.btn{background:#f6b042;color:#072227;border:none;padding:10px 14px;border-radius:10px;font-weight:800;cursor:pointer}
+.btn.subtle{background:transparent;border:1px solid rgba(255,255,255,0.04);color:#cfe7ff}
+.error{color:#ff8b8b;margin-top:8px}
+.celebration{background:linear-gradient(90deg,#d9f99d,#60a5fa);color:#042027;padding:20px;text-align:center}
