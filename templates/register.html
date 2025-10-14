@@ -1,1 +1,51 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Register</title><link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"></head><body class="center"><div class="card"><h1>Register Players</h1><p>Select your manager and type your ID (as in the Excel file).</p><div id="playerList"></div><div style="margin-top:12px"><input id="newID" placeholder="Your ID (as in Excel)"><select id="managerSelect"><option value="">-- choose manager --</option>{% for m in managers %}<option value="{{m}}">{{m}}</option>{% endfor %}</select><button id="addPlayer" class="btn">Add Player</button></div><div style="margin-top:12px"><button id="regDone" class="btn">Finish Registration & Proceed to Intro</button></div></div><script>const playerListEl=document.getElementById('playerList');const players=[];document.getElementById('addPlayer').addEventListener('click',()=>{const id=document.getElementById('newID').value.trim();const manager=document.getElementById('managerSelect').value;if(!id||!manager){alert('Enter ID and select manager');return;}players.push({id:id,manager:manager});render();document.getElementById('newID').value='';});function render(){playerListEl.innerHTML=players.map(p=>`<div>${p.id} — ${p.manager}</div>`).join('');}document.getElementById('regDone').addEventListener('click',async()=>{if(players.length===0){alert('Add at least one player');return;}const resp=await fetch('/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({players:players})});const data=await resp.json();if(data.ok){if(data.players&&data.players.length>0){localStorage.setItem('my_player_number',data.players[0].number);}window.location.href='/welcome_after_register';}else{alert('Registration failed: '+(data.error||'unknown'));}});</script></body></html>
+
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Register Players</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head><body class="center">
+  <div class="card">
+    <h1>Register Players</h1>
+    <p>Select your manager and type your ID (as in the Excel file). Registered players and that manager's team will be excluded from selection.</p>
+    <div id="playerList"></div>
+    <div style="margin-top:12px">
+      <input id="newID" placeholder="Your ID (as Excel)">
+      <select id="managerSelect">
+        <option value="">-- choose manager --</option>
+        {% for m in managers %}
+        <option value="{{m}}">{{m}}</option>
+        {% endfor %}
+      </select>
+      <button id="addPlayer" class="btn">Add Player</button>
+    </div>
+    <div style="margin-top:12px">
+      <button id="regDone" class="btn">Finish Registration & Proceed to Intro</button>
+    </div>
+  </div>
+<script>
+const playerListEl = document.getElementById('playerList');
+const players = [];
+document.getElementById('addPlayer').addEventListener('click', ()=>{
+  const id = document.getElementById('newID').value.trim();
+  const manager = document.getElementById('managerSelect').value;
+  if(!id || !manager){ alert('Enter ID and select manager'); return; }
+  players.push({id: id, manager: manager});
+  render();
+  document.getElementById('newID').value = '';
+});
+function render(){ playerListEl.innerHTML = players.map(p=> `<div>${p.id} — ${p.manager}</div>`).join(''); }
+document.getElementById('regDone').addEventListener('click', async ()=>{
+  if(players.length === 0){ alert('Add at least one player'); return; }
+  const resp = await fetch('/register', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({players: players})});
+  const data = await resp.json();
+  if(data.ok){
+    if(data.players && data.players.length>0){
+      localStorage.setItem('my_player_number', data.players[0].number);
+    }
+    window.location.href = '/welcome_after_register';
+  } else {
+    alert('Registration failed: '+ (data.error || 'unknown'));
+  }
+});
+</script>
+</body></html>
